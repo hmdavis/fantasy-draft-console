@@ -98,7 +98,8 @@ Run `pipeline.py` with the venv active (or `.venv/bin/python pipeline.py â€¦`) â
 build needs `openpyxl`, the manage stages need `scikit-learn`/`matplotlib`.
 
 Without `ANTHROPIC_API_KEY` everything still works; only the Advisor panel is disabled.
-Without `FANTASYPROS_API_KEY`, manage `pull` reuses the cached consensus ranks.
+`FANTASYPROS_API_KEY` is optional. Without it, the board reads the public FantasyPros
+ranking pages. These pages give only the current week. With a key, the API gives all weeks.
 
 ## Configuration
 

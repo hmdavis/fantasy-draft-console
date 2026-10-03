@@ -112,7 +112,7 @@ def norm_injury(status: str) -> str:
 # ── pull (network) ───────────────────────────────────────────────────────────
 def cmd_pull(args) -> int:
     from . import espn
-    from .fetch import MissingApiKeyError, download, resolve_api_key
+    from .fetch import download, optional_api_key
     root = repo_root()
     season, leagues = load_boards(Path(args.config), args.league)
     data_dir = Path(args.data_dir)
@@ -161,12 +161,9 @@ def cmd_pull(args) -> int:
             combos.add((week, pos, scoring))
             combos.add((ROS_CACHE_WEEK, pos, scoring))
 
-    try:
-        api_key = resolve_api_key(None)
-    except MissingApiKeyError as e:
-        print(f"WARNING: {e}")
-        print(f"  skipping FantasyPros refresh; stale caches under {data_dir} still usable.")
-        return 0
+    api_key = optional_api_key(None)
+    if not api_key:
+        print("no FantasyPros API key - reading the public ranking pages (current week only).")
     for i, (week, pos, scoring) in enumerate(sorted(combos)):
         if i:
             time.sleep(1.5)   # the public API throttles bursts (429 after ~8 rapid calls)
