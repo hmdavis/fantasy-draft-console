@@ -63,6 +63,10 @@ or `all`) and manage stages (`pull tiers vbd-boards csg-boards board`, or `week`
   source workbooks).
 - **fftiers** (`fftiers/`) is also usable standalone: `fftiers --league leagues/my.yaml`
   (tier charts), `fftiers-vbd`, `fftiers-csg`, `fftiers-espn discover|sync-league|pull|roster`.
+- **Sleeper leagues** use `scraping/scrape_sleeper.py` (no auth) and
+  `scraping/scrape_sleeper_history.py` (opponent calibration). They write the same
+  ESPN-shaped `league_full.json`, so everything downstream is unchanged. See
+  [`scraping/README.md`](scraping/README.md).
 
 ### Opponent tendencies (draft)
 The per-manager bid model (`mult`/`conc`/`maxbuy`) is calibrated from auction history via
@@ -84,6 +88,8 @@ set -a && . config/.env && set +a                   #  FANTASYPROS_API_KEY)
 
 # 2) Draft mode
 python3 pipeline.py scrape build inject             # or `all` when you have auction history
+#    Sleeper: no cookies. Set "sleeper_league_id" in config/league.json, then:
+python3 scraping/scrape_sleeper.py
 
 # 3) Manage mode
 python3 -m fftiers.espn_cli sync-league <league_id> # writes leagues/<key>.yaml from ESPN

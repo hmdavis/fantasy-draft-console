@@ -35,6 +35,8 @@ One app, two modes:
 | `pyproject.toml` | fftiers packaging (`pip install -e .` into `.venv`) | yes |
 | `draft_sheets/build_tool_data.py` | Draft console builder — projections + scrape → `tool_data.json` | yes |
 | `scraping/scrape_league.py` | Fresh-setup ESPN scraper (settings + managers, config-driven) | yes |
+| `scraping/scrape_sleeper.py` | Fresh-setup **Sleeper** scraper — adapts to ESPN-shaped `league_full.json`, no auth | yes |
+| `scraping/scrape_sleeper_history.py` | Sleeper past seasons (priced picks) → ESPN-shaped `raw/{season}/` for `calibrate` | yes |
 | `draft_sheets/*_elboberto.xlsm` | Universal projection baseline (checked in) | yes |
 | `draft_sheets/CSG*auction.xlsm` | CSG sheet — **complementary market view** (third-party) | no (local) |
 | `draft_sheets/extract_csg.py` | CSG `Overall` tab → `csg_consensus.json` | yes |

@@ -2,7 +2,13 @@
   "_comment": "Copy this to config/league.json and fill it in for YOUR league. It is gitignored (league-specific). Used by scraping/scrape_league.py and draft_sheets/build_tool_data.py.",
 
   "league_id": 0,
-  "_league_id": "Your ESPN league id (the number in the fantasy.espn.com/…/leagues/<THIS> URL). Leave 0 to AUTO-DISCOVER from your cookies (scrape_league.py picks it, or lists them if you're in more than one).",
+  "_league_id": "Your ESPN league id (the number in the fantasy.espn.com/…/leagues/<THIS> URL). Leave 0 to AUTO-DISCOVER from your cookies (scrape_league.py picks it, or lists them if you're in more than one). Ignored if you're on Sleeper.",
+
+  "sleeper_league_id": "",
+  "_sleeper_league_id": "SLEEPER ONLY. Your Sleeper league id (the number in the sleeper.com/leagues/<THIS>/team URL). Set this instead of league_id and run scraping/scrape_sleeper.py — no cookies needed, Sleeper's read API is public. Leave blank if you're on ESPN.",
+
+  "sleeper_username": "",
+  "_sleeper_username": "SLEEPER ONLY. Optional. Your Sleeper display name — scrape_sleeper.py matches it to a manager and writes 'me' for you (the equivalent of ESPN's SWID auto-detect).",
 
   "season": 2026,
   "_season": "Draft season / year.",

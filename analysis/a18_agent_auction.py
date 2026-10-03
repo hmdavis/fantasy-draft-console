@@ -41,7 +41,7 @@ def build_agents():
     paid_sum = defaultdict(lambda: defaultdict(float))
     proj_sum = defaultdict(lambda: defaultdict(float))
     ncount = defaultdict(lambda: defaultdict(int))
-    for yr in [2022, 2023, 2024, 2025]:
+    for yr in [y for y in [2022, 2023, 2024, 2025] if lib.has_season(y)]:
         pl = proj_lookup(yr)
         for p in lib.draft_picks(yr):
             if p["is_keeper"] or p["cost"] < 1:
@@ -52,7 +52,7 @@ def build_agents():
                 proj_sum[p["manager"]][p["pos"]] += e["proj_value"]
                 ncount[p["manager"]][p["pos"]] += 1
     top3 = defaultdict(list); maxbuy = defaultdict(list)
-    for yr in range(2017, 2026):
+    for yr in [y for y in range(2017, 2026) if lib.has_season(y)]:
         byteam = defaultdict(list)
         for p in lib.draft_picks(yr):
             byteam[p["teamId"]].append(p)
