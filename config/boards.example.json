@@ -6,6 +6,13 @@
       "team_id": 0,
       "label": "My League",
       "yaml": "leagues/my-league.yaml"
+    },
+    "my-sleeper-league": {
+      "platform": "sleeper",
+      "league_id": "0",
+      "user": "your-sleeper-username",
+      "label": "My Sleeper League",
+      "yaml": "leagues/my-sleeper-league.yaml"
     }
   }
 }

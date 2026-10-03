@@ -11,7 +11,7 @@ One app, two modes:
   each player valued three independent ways — Boris Chen-style expert-consensus tiers
   (GMM clustering), an elboberto-workbook VBD port, and a CSG games-based VBD port — at
   two horizons (this week / rest of season), with your roster and free agents flagged.
-  Rebuilt from live ESPN + FantasyPros data with one command every week.
+  Rebuilt from live ESPN or Sleeper data + FantasyPros ranks with one command every week.
 
 Built for specific leagues, but the framework is **bring-your-own-league**: the code and
 the universal projection baseline are tracked here; your league configs, data, secrets,
@@ -87,6 +87,7 @@ python3 pipeline.py scrape build inject             # or `all` when you have auc
 
 # 3) Manage mode
 python3 -m fftiers.espn_cli sync-league <league_id> # writes leagues/<key>.yaml from ESPN
+#    Sleeper: python3 -m fftiers.sleeper_cli sync-league <league_id> --dest leagues/<key>.yaml
 python3 pipeline.py week                            # pull + boards + render
 
 # 4) Run
@@ -98,7 +99,27 @@ Run `pipeline.py` with the venv active (or `.venv/bin/python pipeline.py …`) �
 build needs `openpyxl`, the manage stages need `scikit-learn`/`matplotlib`.
 
 Without `ANTHROPIC_API_KEY` everything still works; only the Advisor panel is disabled.
-Without `FANTASYPROS_API_KEY`, manage `pull` reuses the cached consensus ranks.
+`FANTASYPROS_API_KEY` is optional. Without it, the board reads the public FantasyPros
+ranking pages. These pages give only the current week. With a key, the API gives all weeks.
+
+### Sleeper leagues on the manage board
+
+A `config/boards.json` entry with `"platform": "sleeper"` reads Sleeper instead of ESPN.
+It needs no cookies and no API key. Set `league_id` (the number in the sleeper.com league
+URL) and `user` (your Sleeper username), or `team_id` (your `roster_id`). See
+`config/boards.example.json`. Make the league YAML once, and name it after the key:
+
+```bash
+python3 -m fftiers.sleeper_cli sync-league <league_id> --dest leagues/<key>.yaml
+```
+
+`pull` and `sync` (`fftiers/sleeper.py`) write the same `dat/espn/<key>-*` files as for
+ESPN, so the vbd, csg, and board stages do not change. They read the public Sleeper API.
+The weekly projections come from an endpoint that Sleeper does not document:
+`https://api.sleeper.app/projections/nfl/<season>/<week>?season_type=regular&position[]=QB&…`.
+Its stat keys are the same as the league's `scoring_settings` keys, so a player's points
+are the sum of each stat times the league's value for it. Rest of season is the sum of
+each week from the current week to the last playoff week.
 
 ## Configuration
 
@@ -138,7 +159,7 @@ and optionally `DEFAULT_MODE=draft|manage`. See `draft_app/README.md`.
 
 ## Refresh data
 
-- **Weekly (manage):** `python3 pipeline.py week` — new ESPN projections + rosters, fresh
+- **Weekly (manage):** `python3 pipeline.py week` — new ESPN or Sleeper projections + rosters, fresh
   FantasyPros ranks, all boards, re-rendered page.
 - **New season (draft):** drop the new Elboberto `.xlsm` into `draft_sheets/`, point
   `config/league.json` at it, then `python3 pipeline.py scrape build inject` (or `all` to

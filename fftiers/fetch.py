@@ -71,6 +71,13 @@ def resolve_api_key(explicit: str | None = None) -> str:
     )
 
 
+def optional_api_key(explicit: str | None = None) -> str | None:
+    try:
+        return resolve_api_key(explicit)
+    except MissingApiKeyError:
+        return None
+
+
 def cache_path(data_dir: Path, year: int, week: int, position: str, scoring: str) -> Path:
     return data_dir / str(year) / f"week-{week}-{position}-{scoring}.json"
 
@@ -88,11 +95,13 @@ def _truncated(data: dict) -> bool:
 
 
 def download(data_dir: Path, year: int, week: int, position: str, scoring: str,
-             api_key: str) -> Path:
+             api_key: str | None) -> Path:
     dest = cache_path(data_dir, year, week, position, scoring)
     dest.parent.mkdir(parents=True, exist_ok=True)
     if week == ROS_WEEK:
         return _download_ros_page(dest, position, scoring)
+    if not api_key:
+        return _download_week_page(dest, week, position, scoring, "no FantasyPros API key")
     url = API_URL.format(year=year, position=position, week=week, scoring=scoring)
     req = urllib.request.Request(url, headers={"x-api-key": api_key})
     try:
@@ -230,5 +239,5 @@ def get_rankings(data_dir: Path, year: int, week: int, position: str, scoring: s
                  refresh: bool, api_key: str | None) -> list[PlayerRow]:
     path = cache_path(data_dir, year, week, position, scoring)
     if refresh or not path.exists():
-        download(data_dir, year, week, position, scoring, resolve_api_key(api_key))
+        download(data_dir, year, week, position, scoring, optional_api_key(api_key))
     return load_rows(path)

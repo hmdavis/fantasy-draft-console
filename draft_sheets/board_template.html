@@ -280,6 +280,7 @@ tr:hover td{background:var(--card2)}
 .inj.swap{background:var(--accent);cursor:help}
 .lu-diff{font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.02em}
 .lu-diff.warn{color:var(--csg)}
+.rankgap{color:var(--csg);font-weight:700;margin:0 0 10px}
 .lu-diff.ok{color:var(--ink3);font-weight:600}
 #tip{position:fixed;pointer-events:none;background:var(--card);border:1px solid var(--line);
   border-radius:10px;padding:10px 13px;font-size:12.5px;box-shadow:0 6px 24px rgba(0,0,0,.25);
@@ -352,6 +353,7 @@ tr:hover td{background:var(--card2)}
   </div>
 </section>
 
+<p class="note boardonly rankgap" id="rankgap" hidden></p>
 <div class="boardbox boardonly"><table id="board" aria-label="Player valuation board"></table></div>
 <p class="note boardonly" id="footnote"></p>
 
@@ -547,8 +549,14 @@ function render(){
   });
   html += "</tbody>";
   $("#board").innerHTML = html;
+  const noRanks = (L.no_ranks || []).includes(hz);
+  $("#rankgap").hidden = !noRanks;
+  $("#rankgap").textContent = noRanks
+    ? `No FantasyPros ranks for ${ros ? "rest of season" : "this week"}: the Boris tier and Consensus columns are empty. ` +
+      `The roster, elboberto, and CSG values do not use these ranks. A full refresh or a new deploy fetches them.`
+    : "";
   $("#footnote").textContent =
-    `Sources: FantasyPros consensus + ESPN league projections, week ${A.week}. ` +
+    `Sources: FantasyPros consensus + ${L.platform || "ESPN"} league projections, week ${A.week}. ` +
     `K/DST and rows with no positive value are hidden.`;
 
   const tip = $("#tip");
@@ -636,19 +644,20 @@ function computeLineup(L){
 function renderLineup(){
   const L = DATA.leagues[league];
   const {roster, rows, used, haveSlots, startFlag, total, changes} = computeLineup(L);
+  const platform = L.platform || "ESPN";
   $("#lu-title").textContent = L.team;
   const nStarts = changes;
   const diffLine = !haveSlots ? "" : nStarts
-    ? `<div class="lu-diff warn">\u26a0 ${nStarts} change${nStarts > 1 ? "s" : ""} vs your set ESPN lineup</div>`
-    : `<div class="lu-diff ok">matches your set ESPN lineup \u2713</div>`;
+    ? `<div class="lu-diff warn">\u26a0 ${nStarts} change${nStarts > 1 ? "s" : ""} vs your set ${platform} lineup</div>`
+    : `<div class="lu-diff ok">matches your set ${platform} lineup \u2713</div>`;
   $("#lu-total").innerHTML = `<small>projected total</small>${total.toFixed(1)}${diffLine}`;
   $("#lu-starters").innerHTML = rows.map(r =>
     `<tr><td class="slot ${r.slot === "FLEX" ? "flexslot" : ""}">${r.slot}</td>
-     <td class="pname">${r.name}<span class="ecr">${r.slot === "FLEX" ? " " + r.p : ""}${r.espn ? " \u00b7 espn" : ""}</span>${r.inj ? `<span class="inj">${r.inj}</span>` : ""}${startFlag(r) ? `<span class="inj swap" title="On your ESPN bench right now \u2014 the optimal lineup starts him">START</span>` : ""}</td>
+     <td class="pname">${r.name}<span class="ecr">${r.slot === "FLEX" ? " " + r.p : ""}${r.espn ? " \u00b7 " + platform.toLowerCase() : ""}</span>${r.inj ? `<span class="inj">${r.inj}</span>` : ""}${startFlag(r) ? `<span class="inj swap" title="On your ${platform} bench right now \u2014 the optimal lineup starts him">START</span>` : ""}</td>
      <td class="num mono pts">${(r.wk ?? 0).toFixed(1)}</td></tr>`).join("");
   const bench = roster.filter(r => !used.has(r.name)).sort((a,b) => b.wk - a.wk);
   $("#lu-bench").innerHTML = `<h3>Bench &middot; this week</h3><ul>` + bench.map(r =>
-    `<li><span class="mono">${(r.wk ?? 0).toFixed(1)}</span> &nbsp;${r.name} <span class="ecr">${r.p}</span>${r.inj ? `<span class="inj">${r.inj}</span>` : ""}${haveSlots && r.setNow === true ? `<span class="inj swap" title="Currently in your ESPN lineup \u2014 the optimal lineup benches him">SIT</span>` : ""}</li>`).join("") + `</ul>` +
+    `<li><span class="mono">${(r.wk ?? 0).toFixed(1)}</span> &nbsp;${r.name} <span class="ecr">${r.p}</span>${r.inj ? `<span class="inj">${r.inj}</span>` : ""}${haveSlots && r.setNow === true ? `<span class="inj swap" title="Currently in your ${platform} lineup \u2014 the optimal lineup benches him">SIT</span>` : ""}</li>`).join("") + `</ul>` +
     ``;
 }
 // ── The Wire: paginated reporter feed (/api/feed → Bluesky public API) ────────

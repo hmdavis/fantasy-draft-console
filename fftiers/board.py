@@ -1,14 +1,15 @@
-"""Manage board: live ESPN inputs -> viz-data.json -> draft_app/static/board.html.
+"""Manage board: live ESPN or Sleeper inputs -> viz-data.json -> draft_app/static/board.html.
 
-    python -m fftiers.board pull  [--league KEY]   # network: ESPN + FantasyPros
+    python -m fftiers.board pull  [--league KEY]   # network: ESPN/Sleeper + FantasyPros
     python -m fftiers.board build [--league KEY]   # offline: assemble + inject
 
 `pull` writes, per league in config/boards.json:
     dat/espn/<key>-week-<N>.csv       weekly league-scored projections (engine CSV)
     dat/espn/<key>-ros-from-<N>.csv   rest-of-season totals (engine CSV)
     dat/espn/<key>-roster.json        my roster [{name,pos,wk,ros,injury}]
-    dat/espn/<key>-meta.json          {week, final_week, team, league_name, pulled}
-and refreshes the FantasyPros consensus caches the tier boards read (week N +
+    dat/espn/<key>-meta.json          {week, final_week, team, league_name, platform?, pulled}
+A boards.json entry with "platform": "sleeper" reads Sleeper (fftiers.sleeper) and
+writes the same files, still under dat/espn/. The pull also refreshes the FantasyPros consensus caches the tier boards read (week N +
 the ROS sentinel week 90, per position/scoring the leagues need).
 
 `build` is pure offline: Boris tiers from the FP caches (fftiers.cluster),
@@ -101,7 +102,7 @@ def _now() -> str:
 # status pill means "look at this", so healthy must be empty. Long designations get
 # the short pill the board renders elsewhere.
 INJURY_PILLS = {"ACTIVE": "", "NORMAL": "", "QUESTIONABLE": "Q", "DOUBTFUL": "D",
-                "OUT": "OUT", "INJURY_RESERVE": "IR", "SUSPENSION": "SUSP"}
+                "OUT": "OUT", "INJURY_RESERVE": "IR", "SUSPENSION": "SUSP", "SUS": "SUSP"}
 
 
 def norm_injury(status: str) -> str:
@@ -109,20 +110,92 @@ def norm_injury(status: str) -> str:
     return INJURY_PILLS.get(s.upper(), s)
 
 
+def is_sleeper(lg: dict) -> bool:
+    return lg.get("platform") == "sleeper"
+
+
+PLATFORM_LABEL = {"espn": "ESPN", "sleeper": "Sleeper"}
+
+
+def enricher(wk_of, ros_of):
+    def enrich(entries):
+        rows = [{"name": r["name"], "pos": r["pos"], "wk": wk_of(r), "ros": ros_of(r),
+                 "injury": norm_injury(r["injury"]), "slot": r.get("slot", "")}
+                for r in entries]
+        rows.sort(key=lambda r: -r["ros"])
+        return rows
+    return enrich
+
+
+def read_ros_csv(path: Path) -> dict[tuple[str, str], float]:
+    with path.open() as f:
+        return {(norm_name(row["player"]), row["pos"]): float(row["points"])
+                for row in csv.DictReader(f)}
+
+
+def pull_sleeper(key: str, lg: dict, espn_dir: Path, week_arg: int | None,
+                 full: bool) -> int | None:
+    """Sleeper twin of the ESPN pull (full) or sync: writes the same dat/espn files."""
+    from .sleeper import SleeperLeague
+    sl = SleeperLeague.load(lg["league_id"])
+    my_id = sl.team_id_for(lg)
+    week = week_arg or sl.current_week
+    final_week = sl.final_week
+    ros_csv = espn_dir / f"{key}-ros-from-{week}.csv"
+    if not full and not ros_csv.exists():
+        print(f"[{key}] SKIP - no cached {ros_csv.name} for Sleeper week {week}; "
+              f"run the full refresh (`python3 pipeline.py week`) first")
+        return None
+    wk_pool = sl.player_pool(week)
+    if full:
+        print(f"[{key}] week {week}: {len(wk_pool)} players; "
+              f"summing ROS weeks {week}-{final_week} ...")
+        ros_list = sl.ros_pool(week, final_week)
+        ros_by_id = {p["id"]: p["points"] for p in ros_list}
+        ros_of = lambda r: ros_by_id.get(r["id"], 0.0)
+    else:
+        ros_by_name = read_ros_csv(ros_csv)
+        ros_of = lambda r: ros_by_name.get((norm_name(r["name"]), r["pos"]), 0.0)
+    all_rosters = sl.league_rosters(week)
+    team_names = sl.team_names()
+
+    write_pool_csv(espn_dir / f"{key}-week-{week}.csv", wk_pool)
+    if full:
+        write_pool_csv(ros_csv, ros_list)
+    wk_by = {p["id"]: p["points"] for p in wk_pool}
+    enrich = enricher(lambda r: wk_by.get(r["id"], 0.0), ros_of)
+    roster = enrich(all_rosters.get(my_id, []))
+    (espn_dir / f"{key}-roster.json").write_text(json.dumps(roster, indent=1) + "\n")
+    write_teams_json(espn_dir / f"{key}-teams.json", all_rosters, enrich, team_names, my_id)
+    meta = {"week": week, "final_week": final_week, "team": team_names.get(my_id, ""),
+            "league_name": sl.name, "platform": "sleeper", "pulled": _now()}
+    (espn_dir / f"{key}-meta.json").write_text(json.dumps(meta, indent=1) + "\n")
+    print(f"[{key}] {meta['team'] or '?'}: {len(roster)} rostered "
+          f"-> {espn_dir}/{key}-{{week-{week},ros-from-{week}}}.csv + roster/meta json")
+    return week
+
+
 # ── pull (network) ───────────────────────────────────────────────────────────
 def cmd_pull(args) -> int:
     from . import espn
-    from .fetch import MissingApiKeyError, download, resolve_api_key
+    from .fetch import download, optional_api_key
     root = repo_root()
     season, leagues = load_boards(Path(args.config), args.league)
     data_dir = Path(args.data_dir)
     espn_dir = data_dir / "espn"
     espn_dir.mkdir(parents=True, exist_ok=True)
-    cookie = espn.auth_cookie()
+    cookie = espn.auth_cookie() if not all(map(is_sleeper, leagues.values())) else None
     combos: set[tuple[int, str, str]] = set()
 
     for key, lg in leagues.items():
         cfg = load_league(root / lg["yaml"])
+        if is_sleeper(lg):
+            week = pull_sleeper(key, lg, espn_dir, args.week, full=True)
+            for pos in CORE:
+                scoring = cfg.scoring_source if pos in ("RB", "WR", "TE") else "STD"
+                combos.add((week, pos, scoring))
+                combos.add((ROS_CACHE_WEEK, pos, scoring))
+            continue
         info = espn.league_settings(lg["league_id"], season, cookie)
         week = args.week or info["current_week"]
         final_week = int(info.get("final_week")
@@ -161,12 +234,9 @@ def cmd_pull(args) -> int:
             combos.add((week, pos, scoring))
             combos.add((ROS_CACHE_WEEK, pos, scoring))
 
-    try:
-        api_key = resolve_api_key(None)
-    except MissingApiKeyError as e:
-        print(f"WARNING: {e}")
-        print(f"  skipping FantasyPros refresh; stale caches under {data_dir} still usable.")
-        return 0
+    api_key = optional_api_key(None)
+    if not api_key:
+        print("no FantasyPros API key - reading the public ranking pages (current week only).")
     for i, (week, pos, scoring) in enumerate(sorted(combos)):
         if i:
             time.sleep(1.5)   # the public API throttles bursts (429 after ~8 rapid calls)
@@ -276,8 +346,11 @@ def build_league(key: str, lg: dict, cfg: LeagueConfig, meta: dict, roster: list
         teams = [{"id": t["id"], "name": t["name"], "mine": t["mine"],
                   "roster": [row(r) for r in t["roster"]]}
                  for t in json.loads(teams_p.read_text())]
+    no_ranks = [hz for hz, h in horizons.items() if not h["boris"]]
     return {
         "label": lg.get("label", key),
+        "platform": PLATFORM_LABEL.get(meta.get("platform", "espn"), "ESPN"),
+        "no_ranks": no_ranks,
         "size": cfg.teams,
         "scoring": SCORING_LABEL[cfg.scoring_source],
         "lineup": "-".join(("" if n == 1 else str(n)) + s for s, n in slots),
@@ -297,6 +370,7 @@ def cmd_build(args) -> int:
     built: dict[str, dict] = {}
     weeks, finals = [], []
     mtimes: dict[str, list[float]] = {"fp": [], "espn": [], "boards": []}
+    platforms: set[str] = set()
 
     for key, lg in leagues.items():
         meta_p = data_dir / "espn" / f"{key}-meta.json"
@@ -319,6 +393,10 @@ def cmd_build(args) -> int:
             continue
         cfg = load_league(root / lg["yaml"])
         built[key] = build_league(key, lg, cfg, meta, roster, data_dir, out_dir)
+        platforms.add(built[key]["platform"])
+        if built[key]["no_ranks"]:
+            print(f"[{key}] note: no FantasyPros rank cache for "
+                  f"{' + '.join(built[key]['no_ranks'])} - the board shows no tiers there")
         weeks.append(week)
         finals.append(int(meta.get("final_week") or 17))
         mtimes["espn"] += [meta_p.stat().st_mtime, roster_p.stat().st_mtime]
@@ -343,7 +421,7 @@ def cmd_build(args) -> int:
     if mtimes["fp"]:
         sources["FantasyPros consensus ranks"] = day(max(mtimes["fp"]))
     if mtimes["espn"]:
-        sources["ESPN rosters & projections"] = day(max(mtimes["espn"]))
+        sources[f"{' & '.join(sorted(platforms))} rosters & projections"] = day(max(mtimes["espn"]))
     if mtimes["boards"]:
         sources["VBD / CSG boards"] = day(max(mtimes["boards"]))
     data = {"asof": {"week": week, "built": _now(),
@@ -414,16 +492,23 @@ def cmd_sync(args) -> int:
     ROS csv by normalized name (fallback: the previous snapshot's value).
     """
     from . import espn
+    from .sleeper import SleeperError
     root = repo_root()
     season, leagues = load_boards(Path(args.config), args.league)
     data_dir = Path(args.data_dir)
     espn_dir = data_dir / "espn"
     espn_dir.mkdir(parents=True, exist_ok=True)
-    cookie = espn.auth_cookie()
+    cookie = espn.auth_cookie() if not all(map(is_sleeper, leagues.values())) else None
     synced = 0
 
     for key, lg in leagues.items():
         cfg = load_league(root / lg["yaml"])
+        if is_sleeper(lg):
+            try:
+                synced += pull_sleeper(key, lg, espn_dir, args.week, full=False) is not None
+            except (SleeperError, OSError) as e:
+                print(f"[{key}] SKIP - Sleeper error: {e}")
+            continue
         # ALL network first, ALL writes last: an ESPN failure mid-league must leave
         # that league's dat/espn files exactly as they were, and move on.
         try:
