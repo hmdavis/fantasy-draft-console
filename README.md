@@ -89,7 +89,7 @@ python3 pipeline.py scrape build inject             # or `all` when you have auc
 python3 -m fftiers.espn_cli sync-league <league_id> # writes leagues/<key>.yaml from ESPN
 python3 pipeline.py week                            # pull + boards + render
 
-# 4) Run
+# 4) Run (the server loads config/.env at startup; restart to pick up edits)
 cd draft_app && uvicorn server:app --host 127.0.0.1 --port 8000
 # open http://127.0.0.1:8000  (/ → manage; /draft for the auction console)
 ```
@@ -117,6 +117,16 @@ set -a && . config/.env && set +a
 See [`config/README.md`](config/README.md) for the full table. Generated data
 (`tool_data.json`, `static/*.html`, `dat/`, `out/`, `reports/`, scrapes) is built by the
 pipeline, not committed.
+
+**Second machine?** Because all of that is gitignored, a fresh clone has no league in it.
+`sync_league_data.py` gathers those paths into one folder you can put in iCloud/Dropbox:
+
+```bash
+python3 sync_league_data.py export ~/Dropbox/my-league   # repo   -> folder
+python3 sync_league_data.py import ~/Dropbox/my-league   # folder -> repo
+```
+Secrets (`config/.env`, `scraping/.espn_auth.json`) are skipped unless you pass
+`--with-secrets`; only do that if the destination is private to you.
 
 ## The advisor
 

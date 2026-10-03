@@ -32,6 +32,40 @@ DEFAULT_MODEL = "claude-haiku-4-5"  # fast, for live-draft latency
 # models the advisor dropdown may select (allowlist — anything else falls back to default)
 ALLOWED_MODELS = {"claude-haiku-4-5", "claude-sonnet-5", "claude-opus-4-8"}
 
+
+def _load_dotenv():
+    """Populate os.environ from config/.env when present.
+
+    The advisor reads ANTHROPIC_API_KEY from the environment and the README tells you to
+    put it in config/.env — but nothing ever loaded that file, so the documented setup
+    only worked if you separately sourced it into your shell (`set -a && . config/.env`).
+    That step is POSIX-only, so on Windows the key sat in the file and the advisor stayed
+    silently disabled. Parsed here instead: KEY=VALUE, `#` comments, optional surrounding
+    quotes. Never overrides a variable already set for real — an explicit export, a
+    Railway config var, or a systemd Environment= still wins.
+    """
+    path = os.environ.get("DOTENV_PATH",
+                          os.path.join(HERE, os.pardir, "config", ".env"))
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key, val = key.strip(), val.strip()
+                if len(val) > 1 and val[0] == val[-1] and val[0] in ("'", '"'):
+                    val = val[1:-1]
+                if key:
+                    os.environ.setdefault(key, val)
+    except OSError:
+        pass
+
+
+_load_dotenv()
+
 def _load_briefing():
     """The advisor's system prompt. Kept in the local (gitignored) config/ directory so
     league-specific content (opponent names, your plan, your league's tendencies) stays

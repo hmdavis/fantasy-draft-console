@@ -20,7 +20,7 @@ APP="$ROOT/draft_app"
 [[ -f "$APP/static/index.html" ]] || {
   echo "✗ draft_app/static/index.html missing — run: python3 pipeline.py build inject" >&2; exit 1; }
 
-BUNDLE="$(mktemp -d -t draft-console-deploy)"
+BUNDLE="$(mktemp -d -t draft-console-deploy.XXXXXX)"
 trap 'rm -rf "$BUNDLE"' EXIT
 
 # ── the runtime surface, and nothing else ──
